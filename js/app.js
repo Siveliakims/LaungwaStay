@@ -43,7 +43,47 @@ if(protectedPage){
   const required=document.body.dataset.role;
   // Do not infer admin/owner authority from user-editable metadata. The existing RLS policies remain authoritative.
   const box=document.getElementById('dashboard-data')||document.getElementById('owner-data')||document.getElementById('admin-data');
-  if(box)box.innerHTML=`<p>Signed in as <strong>${session.user.email}</strong>.</p><p class="muted">Account role and page permissions are enforced by your Supabase database policies. Configure role-aware routing using the protected profile fields in your existing schema.</p>`;
+  if(box){
+   if(path.endsWith('/account/profile.html')){
+    const metadata=session.user.user_metadata||{};
+    const nameField=profile?['full_name','fullName','display_name','displayName','name'].find(key=>Object.hasOwn(profile,key)):null;
+    const phoneField=profile?['phone','phone_number','phoneNumber','mobile','mobile_number'].find(key=>Object.hasOwn(profile,key)):null;
+    const fullName=profile?.[nameField]||metadata.full_name||metadata.fullName||metadata.name||'';
+    const phone=profile?.[phoneField]||metadata.phone||metadata.phone_number||'';
+    const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    box.innerHTML=`<form class="form-card" id="profile-form"><label>Full name<input name="full_name" autocomplete="name" required value="${escapeHtml(fullName)}"></label><label>Phone number<input name="phone" type="tel" autocomplete="tel" value="${escapeHtml(phone)}"></label><label>Email address<input type="email" value="${escapeHtml(session.user.email)}" disabled><small class="form-note">Email changes are managed through your sign-in settings.</small></label><button class="btn btn-primary" type="submit">Save profile</button><p id="profile-message" class="form-note" aria-live="polite"></p></form>`;
+    document.getElementById('profile-form').addEventListener('submit',async event=>{
+     event.preventDefault();
+     const form=event.currentTarget;
+     const message=document.getElementById('profile-message');
+     const button=form.querySelector('button[type="submit"]');
+     const nextName=form.elements.full_name.value.trim();
+     const nextPhone=form.elements.phone.value.trim();
+     button.disabled=true;
+     message.textContent='Saving…';
+     try{
+      const {error:authError}=await client.auth.updateUser({data:{full_name:nextName,phone:nextPhone}});
+      if(authError)throw authError;
+      if(profile&&(nameField||phoneField)){
+       const changes={};
+       if(nameField)changes[nameField]=nextName;
+       if(phoneField)changes[phoneField]=nextPhone;
+       const {error:profileError}=await client.from('profiles').update(changes).eq('id',session.user.id);
+       if(profileError){
+        console.warn('Profile table update:',profileError.message);
+        message.textContent='Your account details were saved, but the profile table could not be synced: '+profileError.message;
+       }else{
+        if(nameField)profile[nameField]=nextName;
+        if(phoneField)profile[phoneField]=nextPhone;
+        message.textContent='Profile saved.';
+       }
+      }else message.textContent='Profile saved to your account.';
+     }catch(error){
+      message.textContent=error.message||'Your profile could not be saved.';
+     }finally{button.disabled=false;}
+    });
+   }else box.innerHTML=`<p>Signed in as <strong>${session.user.email}</strong>.</p><p class="muted">Account role and page permissions are enforced by your Supabase database policies. Configure role-aware routing using the protected profile fields in your existing schema.</p>`;
+  }
  }
 }
 document.getElementById('property-form')?.addEventListener('submit',e=>{e.preventDefault();document.getElementById('owner-message').textContent='Form captured in the interface. Map the property fields to your existing properties table before enabling inserts.';});
