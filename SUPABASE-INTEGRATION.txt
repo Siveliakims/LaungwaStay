@@ -1,0 +1,66 @@
+SUPABASE CONNECTION CHECKLIST
+=============================
+
+A. Browser configuration
+------------------------
+Edit js/supabase-config.js:
+  SUPABASE_URL = "https://YOUR-PROJECT.supabase.co"
+  SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY"
+
+Use only the anon/public key in browser code. RLS is the security boundary.
+Never expose service_role keys, database passwords or payment secrets.
+
+B. Existing tables
+------------------
+This frontend expects the existing tables:
+profiles
+owner_accounts
+properties
+property_images
+rooms
+amenities
+property_amenities
+room_availability
+bookings
+platform_settings
+payments
+commissions
+owner_payouts
+reviews
+
+The previous database build enabled RLS on all 14 tables and created role/ownership
+policies. Keep those policies. Do not disable RLS to make the website appear to work.
+
+C. Schema adapter
+-----------------
+Column names differ between projects. Before turning on live queries, compare
+js/data.js with the actual columns in your existing Supabase tables and update
+the select/filter/insert fields there. The frontend includes a safe demo fallback
+when a query cannot be completed; it does not silently create tables.
+
+D. Authentication
+-----------------
+Supabase Auth email/password sign-up and sign-in are wired in js/auth.js.
+Email confirmation may be required by your Supabase Auth settings. Set the
+Site URL and allowed redirect URLs in Supabase Auth URL Configuration to your
+deployed website URL and its local development URL.
+
+E. Storage
+----------
+Create/use the existing property-photos storage bucket if it was part of your setup.
+Storage policies must allow owners to upload only to their own property paths and
+allow public reads for approved property images. Verify policies before uploading.
+
+F. Secure operations still required
+-----------------------------------
+Implement Supabase Edge Functions for:
+- creating bookings after checking room availability and date overlap;
+- initiating payment with your chosen payment provider;
+- verifying payment callbacks/webhooks;
+- calculating commissions from platform_settings;
+- creating owner payout records and processing payouts;
+- privileged admin actions.
+
+Do not mark a booking as paid from the browser. Do not let a browser set its own
+role, property approval state, commission percentage, payment verification state,
+or payout status.

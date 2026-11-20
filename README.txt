@@ -48,4 +48,3 @@ DESIGN
 ------
 Cream backgrounds, forest-green navigation, muted gold accents, responsive layout,
 and separate public, traveller, owner and administrator pages.
-
