@@ -1,5 +1,5 @@
-// Add your existing Supabase project details here.
-// Use the anon/public key only. Never use the service_role key in frontend code.
-export const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
-export const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
+// Browser-safe Supabase project settings.
+// Use only the publishable/anon key here. Never use a secret or service_role key.
+export const SUPABASE_URL = "https://wuoxrokjpkbaslejdjzr.supabase.co";
+export const SUPABASE_ANON_KEY = "sb_publishable_stIEv0xUKH8CXmKkh8dKWA_LSOOboWE";
 export const isSupabaseConfigured = !SUPABASE_URL.includes("YOUR-PROJECT") && !SUPABASE_ANON_KEY.includes("YOUR-ANON");
