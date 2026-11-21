@@ -39,6 +39,18 @@ if(all){
  if(checkoutField)checkoutField.min=checkinField?.value||localDate(0);
  checkinField?.addEventListener('change',()=>{if(checkoutField){checkoutField.min=checkinField.value||localDate(0);if(checkoutField.value&&checkoutField.value<=checkinField.value)checkoutField.value='';}});
  const priceOf=p=>{const raw=p.price_from??p.price??'';const n=Number(raw);if(Number.isFinite(n)&&n>0)return n;const parsed=String(raw).replace(/,/g,'').match(/\d+(?:\.\d+)?/);return parsed?Number(parsed[0]):0;};
+ const syncSearchUrl=()=>{
+  const next=new URLSearchParams();
+  const destination=String(destinationField?.value||'').trim();
+  if(destination)next.set('destination',destination);
+  if(checkinField?.value)next.set('checkin',checkinField.value);
+  if(checkoutField?.value)next.set('checkout',checkoutField.value);
+  if(guestsField?.value)next.set('guests',guestsField.value);
+  typeInputs.filter(input=>input.checked).forEach(input=>next.append('type',input.value.toLowerCase()));
+  if(priceFilter?.value)next.set('price',priceFilter.value);
+  if(sortField?.value&&sortField.value!=='recommended')next.set('sort',sortField.value);
+  history.replaceState(null,'',location.pathname+(next.size?'?'+next.toString():''));
+ };
  const render=()=>{
   const term=String(destinationField?.value||'').trim().toLowerCase();
   const selectedTypes=typeInputs.filter(input=>input.checked).map(input=>input.value.toLowerCase());
@@ -53,7 +65,10 @@ if(all){
   const sort=sortField?.value||'recommended';
   list.sort((a,b)=>{
    if(sort==='price-low'||sort==='price-high'){
-    const pa=priceOf(a)||Number.MAX_SAFE_INTEGER,pb=priceOf(b)||Number.MAX_SAFE_INTEGER;
+    const pa=priceOf(a),pb=priceOf(b);
+    if(!pa&&!pb)return 0;
+    if(!pa)return 1;
+    if(!pb)return -1;
     return sort==='price-low'?pa-pb:pb-pa;
    }
    if(sort==='name')return String(a.name||a.title||'').localeCompare(String(b.name||b.title||''));
@@ -65,22 +80,13 @@ if(all){
  searchForm?.addEventListener('submit',event=>{
   event.preventDefault();
   if(checkinField?.value&&checkoutField?.value&&checkoutField.value<=checkinField.value){if(status)status.textContent='Check-out must be after check-in.';checkoutField.focus();return;}
-  const next=new URLSearchParams();
-  const destination=String(destinationField?.value||'').trim();
-  if(destination)next.set('destination',destination);
-  if(checkinField?.value)next.set('checkin',checkinField.value);
-  if(checkoutField?.value)next.set('checkout',checkoutField.value);
-  if(guestsField?.value)next.set('guests',guestsField.value);
-  typeInputs.filter(input=>input.checked).forEach(input=>next.append('type',input.value.toLowerCase()));
-  if(priceFilter?.value)next.set('price',priceFilter.value);
-  if(sortField?.value&&sortField.value!=='recommended')next.set('sort',sortField.value);
-  history.replaceState(null,'',location.pathname+(next.size?'?'+next.toString():''));
+  syncSearchUrl();
   if(status)status.textContent=checkinField?.value||checkoutField?.value?'Dates and guest count are saved in your search. Room availability is not connected yet.':'Search updated.';
   render();
  });
- typeInputs.forEach(input=>input.addEventListener('change',render));
- priceFilter?.addEventListener('change',render);
- sortField?.addEventListener('change',render);
+ typeInputs.forEach(input=>input.addEventListener('change',()=>{syncSearchUrl();render();}));
+ priceFilter?.addEventListener('change',()=>{syncSearchUrl();render();});
+ sortField?.addEventListener('change',()=>{syncSearchUrl();render();});
  render();
 }
 const premium=document.getElementById('premium-properties');if(premium)premium.innerHTML=(demo?properties:properties.filter(p=>p.is_premium||p.featured)).map(propertyCard).join('')||'<div class="empty-state">Premium stays will appear here.</div>';
