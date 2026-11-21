@@ -1,9 +1,18 @@
 import { client } from './supabase.js';
 import { signIn, signUp, signOut, getSession, getProfile } from './auth.js';
-import { getApprovedProperties, demoProperties, propertyCard } from './data.js';
+import { getApprovedProperties, demoProperties, propertyCard, esc, safeImage, propertyImage } from './data.js';
 
 const path = location.pathname;
 const prefix = path.includes('/owner/')||path.includes('/admin/')||path.includes('/account/') ? '../' : '';
+// Only follow same-site, absolute-path redirects (blocks open redirects such as //evil.com or https://evil.com).
+const safeNext=value=>{
+ if(!value||!value.startsWith('/')||value.startsWith('//')||value.includes('\\'))return '';
+ try{const u=new URL(value,location.origin);if(u.origin!==location.origin||/\/(login|register)\.html$/.test(u.pathname))return '';return u.pathname+u.search+u.hash;}catch{return '';}
+};
+// Client-side role check for navigation only. Real authority stays with Supabase RLS / server-side code.
+// Fails closed: if the role cannot be read from the profile, owner and admin pages stay hidden.
+const roleOf=profile=>String(profile?.role??profile?.user_role??profile?.account_type??'').toLowerCase().trim();
+const canAccess=(required,role)=>required==='admin'?role==='admin':required==='owner'?['owner','property_owner','admin'].includes(role):true;
 const header = `<header class="site-header"><div class="container nav-row"><a class="brand" href="${prefix}index.html">Luangwa<span>Stay</span></a><button class="mobile-toggle" id="mobile-toggle" aria-label="Open menu">☰</button><nav class="nav-links" id="nav-links"><a href="${prefix}index.html">Home</a><a href="${prefix}stays.html">Explore stays</a><a href="${prefix}destinations.html">Destinations</a><a href="${prefix}premium.html">Premium</a><a href="${prefix}sponsors.html">Sponsors</a><a href="${prefix}list-property.html">List your property</a></nav><div class="nav-actions"><a class="btn btn-outline" href="${prefix}login.html">Sign in</a></div></div></header>`;
 const footer = `<footer class="footer"><div class="container"><div class="footer-grid"><div><a class="brand" href="${prefix}index.html">Luangwa<span>Stay</span></a><p>Discover your perfect stay. Connecting travellers with welcoming accommodation and local hospitality.</p></div><div><h4>EXPLORE</h4><p><a href="${prefix}stays.html">Explore stays</a></p><p><a href="${prefix}destinations.html">Destinations</a></p><p><a href="${prefix}premium.html">Premium stays</a></p></div><div><h4>WORK WITH US</h4><p><a href="${prefix}list-property.html">List your property</a></p><p><a href="${prefix}about.html">About LuangwaStay</a></p><p><a href="${prefix}contact.html">Contact</a></p></div></div><div class="footer-bottom">© ${new Date().getFullYear()} LuangwaStay. All rights reserved.</div></div></footer>`;
 document.getElementById('site-header')?.insertAdjacentHTML('afterbegin',header);
@@ -49,7 +58,7 @@ if(all){
   typeInputs.filter(input=>input.checked).forEach(input=>next.append('type',input.value.toLowerCase()));
   if(priceFilter?.value)next.set('price',priceFilter.value);
   if(sortField?.value&&sortField.value!=='recommended')next.set('sort',sortField.value);
-  history.replaceState(null,'',location.pathname+(next.size?'?'+next.toString():''));
+  history.replaceState(null,'',location.pathname+(next.toString()?'?'+next.toString():''));
  };
  const render=()=>{
   const term=String(destinationField?.value||'').trim().toLowerCase();
@@ -95,10 +104,10 @@ if(detail){
  const id=new URLSearchParams(location.search).get('id')||new URLSearchParams(location.search).get('demo');
  const p=properties.find(x=>x.id===id);
  if(!p){detail.innerHTML='<div class="empty-state">This property could not be found. <a href="stays.html">Browse all stays</a>.</div>';}
- else{detail.innerHTML=`<p class="eyebrow">${p.location||'Zambia'}</p><h1 style="font:500 45px Playfair Display;color:var(--green)">${p.name||'Accommodation'}</h1><div class="property-layout"><div><div class="property-cover" style="background-image:url('${p.image||p.cover_image_url||'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?auto=format&fit=crop&w=1200&q=80'}')"></div><h2>About this stay</h2><p>${p.description||'Discover this accommodation.'}</p><p class="muted">${demo?'Sample listing — not bookable.':'Property details are being connected to the live room and availability tables.'}</p></div><aside class="booking-box"><span class="eyebrow">PLAN YOUR STAY</span><h2>${p.price||'Check rates'}</h2><p>Choose your dates and room options when live booking is enabled.</p><a class="btn btn-primary full" href="login.html">Sign in to continue</a><p class="form-note">Bookings and payments will be confirmed through secure server-side services.</p></aside></div>`;}
+ else{const detailPrice=p.price_from?`From ZMW ${p.price_from}`:(p.price||'Check rates');detail.innerHTML=`<p class="eyebrow">${esc(p.location||p.city||'Zambia')}</p><h1 style="font:500 45px Playfair Display;color:var(--green)">${esc(p.name||p.title||'Accommodation')}</h1><div class="property-layout"><div><div class="property-cover" style="background-image:url('${safeImage(propertyImage(p))}')"></div><h2>About this stay</h2><p>${esc(p.description||'Discover this accommodation.')}</p><p class="muted">${demo?'Sample listing — not bookable.':'Property details are being connected to the live room and availability tables.'}</p></div><aside class="booking-box"><span class="eyebrow">PLAN YOUR STAY</span><h2>${esc(detailPrice)}</h2><p>Choose your dates and room options when live booking is enabled.</p><a class="btn btn-primary full" href="login.html">Sign in to continue</a><p class="form-note">Bookings and payments will be confirmed through secure server-side services.</p></aside></div>`;}
 }
-document.getElementById('home-search')?.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const params=new URLSearchParams();for(const key of ['destination','checkin','checkout','guests']){const value=String(fd.get(key)||'').trim();if(value)params.set(key,value);}if(fd.get('checkin')&&fd.get('checkout')&&String(fd.get('checkout'))<=String(fd.get('checkin'))){alert('Check-out must be after check-in.');return;}location.href='stays.html'+(params.size?'?'+params.toString():'');});
-document.getElementById('login-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const msg=document.getElementById('auth-message');msg.textContent='Signing in…';try{await signIn(f.email.value,f.password.value);msg.textContent='Signed in. Redirecting…';location.href='account/dashboard.html';}catch(err){msg.textContent=err.message;}});
+document.getElementById('home-search')?.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const params=new URLSearchParams();for(const key of ['destination','checkin','checkout','guests']){const value=String(fd.get(key)||'').trim();if(value)params.set(key,value);}if(fd.get('checkin')&&fd.get('checkout')&&String(fd.get('checkout'))<=String(fd.get('checkin'))){alert('Check-out must be after check-in.');return;}location.href='stays.html'+(params.toString()?'?'+params.toString():'');});
+document.getElementById('login-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const msg=document.getElementById('auth-message');msg.textContent='Signing in…';try{await signIn(f.email.value,f.password.value);msg.textContent='Signed in. Redirecting…';location.href=safeNext(new URLSearchParams(location.search).get('next'))||'account/dashboard.html';}catch(err){msg.textContent=err.message;}});
 document.getElementById('register-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const msg=document.getElementById('auth-message');msg.textContent='Creating account…';try{const result=await signUp({email:f.email.value,password:f.password.value,fullName:f.full_name.value,accountType:f.account_type.value});msg.textContent=result.session?'Account created.':'Check your email to confirm your account.';}catch(err){msg.textContent=err.message;}});
 document.querySelectorAll('[data-signout]').forEach(b=>b.addEventListener('click',async()=>{await signOut();location.href='../index.html';}));
 const protectedPage=document.body.dataset.page==='protected';
@@ -108,16 +117,18 @@ if(protectedPage){
  else{
   const profile=await getProfile(session.user.id);
   const required=document.body.dataset.role;
-  // Do not infer admin/owner authority from user-editable metadata. The existing RLS policies remain authoritative.
-  const box=document.getElementById('dashboard-data')||document.getElementById('owner-data')||document.getElementById('admin-data');
+  // Do not infer admin/owner authority from user-editable metadata (user_metadata). The role comes from the profiles table only.
+  const allowed=canAccess(required,roleOf(profile));
+  if(!allowed){document.querySelector('main')?.setAttribute('hidden','');location.replace(prefix+'account/dashboard.html');}
+  const box=allowed?(document.getElementById('dashboard-data')||document.getElementById('owner-data')||document.getElementById('admin-data')):null;
   if(box){
    if(path.endsWith('/account/profile.html')){
     const metadata=session.user.user_metadata||{};
-    const nameField=profile?['full_name','fullName','display_name','displayName','name'].find(key=>Object.hasOwn(profile,key)):null;
-    const phoneField=profile?['phone','phone_number','phoneNumber','mobile','mobile_number'].find(key=>Object.hasOwn(profile,key)):null;
+    const nameField=profile?['full_name','fullName','display_name','displayName','name'].find(key=>Object.prototype.hasOwnProperty.call(profile,key)):null;
+    const phoneField=profile?['phone','phone_number','phoneNumber','mobile','mobile_number'].find(key=>Object.prototype.hasOwnProperty.call(profile,key)):null;
     const fullName=profile?.[nameField]||metadata.full_name||metadata.fullName||metadata.name||'';
     const phone=profile?.[phoneField]||metadata.phone||metadata.phone_number||'';
-    const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    const escapeHtml=esc;
     box.innerHTML=`<form class="form-card" id="profile-form"><label>Full name<input name="full_name" autocomplete="name" required value="${escapeHtml(fullName)}"></label><label>Phone number<input name="phone" type="tel" autocomplete="tel" value="${escapeHtml(phone)}"></label><label>Email address<input type="email" value="${escapeHtml(session.user.email)}" disabled><small class="form-note">Email changes are managed through your sign-in settings.</small></label><button class="btn btn-primary" type="submit">Save profile</button><p id="profile-message" class="form-note" aria-live="polite"></p></form>`;
     document.getElementById('profile-form').addEventListener('submit',async event=>{
      event.preventDefault();
@@ -149,7 +160,7 @@ if(protectedPage){
       message.textContent=error.message||'Your profile could not be saved.';
      }finally{button.disabled=false;}
     });
-   }else box.innerHTML=`<p>Signed in as <strong>${session.user.email}</strong>.</p><p class="muted">Account role and page permissions are enforced by your Supabase database policies. Configure role-aware routing using the protected profile fields in your existing schema.</p>`;
+   }else box.innerHTML=`<p>Signed in as <strong>${esc(session.user.email)}</strong>.</p><p class="muted">Account role and page permissions are enforced by your Supabase database policies. Configure role-aware routing using the protected profile fields in your existing schema.</p>`;
   }
  }
 }
