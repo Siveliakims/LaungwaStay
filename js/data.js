@@ -21,5 +21,6 @@ export function propertyCard(p){
  const desc=p.description||'Discover this accommodation on LuangwaStay.';
  const price=p.price_from?`From ZMW ${p.price_from}`:(p.price||'View rates');
  const href=p.id?.startsWith('demo-')?'property.html?demo='+p.id:'property.html?id='+encodeURIComponent(p.id||'');
- return `<article class="stay-card"><a href="${href}"><div class="stay-image" style="background-image:url('${image.replace(/'/g,'%27')}')"><span class="stay-tag">${type}</span></div></a><div class="stay-body"><span class="stay-location">${location}</span><h3><a href="${href}">${name}</a></h3><p>${desc}</p><div class="stay-bottom"><span class="price">${price}</span><a class="text-link" href="${href}">View stay ↗</a></div></div></article>`;
+ const sample=p.id?.startsWith('demo-')?'<span class="stay-demo">SAMPLE LISTING</span>':'';
+ return `<article class="stay-card"><a href="${href}"><div class="stay-image" style="background-image:url('${image.replace(/'/g,'%27')}')"><span class="stay-tag">${type}</span>${sample}</div></a><div class="stay-body"><span class="stay-location">${location}</span><h3><a href="${href}">${name}</a></h3><p>${desc}</p><div class="stay-bottom"><span class="price">${price}</span><a class="text-link" href="${href}">View stay ↗</a></div></div></article>`;
 }
