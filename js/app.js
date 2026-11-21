@@ -15,12 +15,73 @@ const featured=document.getElementById('featured-properties');
 if(featured) featured.innerHTML=(demo?properties.filter(p=>p.featured):properties.slice(0,3)).map(propertyCard).join('')||'<div class="empty-state">No approved stays are listed yet.</div>';
 const all=document.getElementById('all-properties');
 if(all){
- const params=new URLSearchParams(location.search); const q=(params.get('destination')||'').toLowerCase();
- let list=properties.filter(p=>!q||JSON.stringify(p).toLowerCase().includes(q));
- all.innerHTML=list.map(propertyCard).join('')||'<div class="empty-state">No stays match your search yet.</div>';
- document.getElementById('results-count').textContent=`${list.length} ${demo?'sample':'listed'} stays`;
- document.getElementById('stay-search')?.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const term=String(fd.get('q')||'').toLowerCase();const typ=String(fd.get('type')||'').toLowerCase();const filtered=properties.filter(p=>(!term||JSON.stringify(p).toLowerCase().includes(term))&&(!typ||String(p.property_type||'').toLowerCase()===typ));all.innerHTML=filtered.map(propertyCard).join('')||'<div class="empty-state">No matching stays found.</div>';document.getElementById('results-count').textContent=`${filtered.length} stays found`;});
- document.getElementById('sort-stays')?.addEventListener('change',e=>{const sorted=[...properties].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));all.innerHTML=(e.target.value==='name'?sorted:properties).map(propertyCard).join('');});
+ const params=new URLSearchParams(location.search);
+ const searchForm=document.getElementById('stay-search');
+ const destinationField=searchForm?.elements.q;
+ const checkinField=searchForm?.elements.checkin;
+ const checkoutField=searchForm?.elements.checkout;
+ const guestsField=searchForm?.elements.guests;
+ const status=document.getElementById('search-message');
+ const typeInputs=[...document.querySelectorAll('[name="stay-type"]')];
+ const priceFilter=document.getElementById('price-filter');
+ const sortField=document.getElementById('sort-stays');
+ const requestedTypes=params.getAll('type').map(value=>value.toLowerCase());
+ const requestedType=(params.get('type')||'').toLowerCase();
+ if(destinationField)destinationField.value=params.get('destination')||params.get('q')||'';
+ if(checkinField)checkinField.value=params.get('checkin')||'';
+ if(checkoutField)checkoutField.value=params.get('checkout')||'';
+ if(guestsField)guestsField.value=params.get('guests')||'2';
+ if(priceFilter)priceFilter.value=params.get('price')||'';
+ if(sortField)sortField.value=params.get('sort')||'recommended';
+ typeInputs.forEach(input=>input.checked=(requestedTypes.length?requestedTypes:requestedType?[requestedType]:[]).includes(input.value.toLowerCase()));
+ const localDate=day=>{const d=new Date();d.setDate(d.getDate()+day);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
+ if(checkinField)checkinField.min=localDate(0);
+ if(checkoutField)checkoutField.min=checkinField?.value||localDate(0);
+ checkinField?.addEventListener('change',()=>{if(checkoutField){checkoutField.min=checkinField.value||localDate(0);if(checkoutField.value&&checkoutField.value<=checkinField.value)checkoutField.value='';}});
+ const priceOf=p=>{const raw=p.price_from??p.price??'';const n=Number(raw);if(Number.isFinite(n)&&n>0)return n;const parsed=String(raw).replace(/,/g,'').match(/\d+(?:\.\d+)?/);return parsed?Number(parsed[0]):0;};
+ const render=()=>{
+  const term=String(destinationField?.value||'').trim().toLowerCase();
+  const selectedTypes=typeInputs.filter(input=>input.checked).map(input=>input.value.toLowerCase());
+  const budget=priceFilter?.value||'';
+  let list=properties.filter(p=>{
+   const matchesTerm=!term||JSON.stringify(p).toLowerCase().includes(term);
+   const matchesType=!selectedTypes.length||selectedTypes.includes(String(p.property_type||'').toLowerCase());
+   const price=priceOf(p);
+   const matchesBudget=!budget||(price>0&&(budget==='under-1000'?price<1000:budget==='1000-2000'?price>=1000&&price<=2000:price>2000));
+   return matchesTerm&&matchesType&&matchesBudget;
+  });
+  const sort=sortField?.value||'recommended';
+  list.sort((a,b)=>{
+   if(sort==='price-low'||sort==='price-high'){
+    const pa=priceOf(a)||Number.MAX_SAFE_INTEGER,pb=priceOf(b)||Number.MAX_SAFE_INTEGER;
+    return sort==='price-low'?pa-pb:pb-pa;
+   }
+   if(sort==='name')return String(a.name||a.title||'').localeCompare(String(b.name||b.title||''));
+   return Number(Boolean(b.featured||b.is_premium))-Number(Boolean(a.featured||a.is_premium));
+  });
+  all.innerHTML=list.map(propertyCard).join('')||(properties.length?'<div class="empty-state">No stays match these filters. Try widening your search.</div>':'<div class="empty-state">No properties are listed yet. Please check back soon, or <a href="list-property.html">list your property</a>.</div>');
+  document.getElementById('results-count').textContent=list.length+' '+(demo?'sample stays':'listed stays');
+ };
+ searchForm?.addEventListener('submit',event=>{
+  event.preventDefault();
+  if(checkinField?.value&&checkoutField?.value&&checkoutField.value<=checkinField.value){if(status)status.textContent='Check-out must be after check-in.';checkoutField.focus();return;}
+  const next=new URLSearchParams();
+  const destination=String(destinationField?.value||'').trim();
+  if(destination)next.set('destination',destination);
+  if(checkinField?.value)next.set('checkin',checkinField.value);
+  if(checkoutField?.value)next.set('checkout',checkoutField.value);
+  if(guestsField?.value)next.set('guests',guestsField.value);
+  typeInputs.filter(input=>input.checked).forEach(input=>next.append('type',input.value.toLowerCase()));
+  if(priceFilter?.value)next.set('price',priceFilter.value);
+  if(sortField?.value&&sortField.value!=='recommended')next.set('sort',sortField.value);
+  history.replaceState(null,'',location.pathname+(next.size?'?'+next.toString():''));
+  if(status)status.textContent=checkinField?.value||checkoutField?.value?'Dates and guest count are saved in your search. Room availability is not connected yet.':'Search updated.';
+  render();
+ });
+ typeInputs.forEach(input=>input.addEventListener('change',render));
+ priceFilter?.addEventListener('change',render);
+ sortField?.addEventListener('change',render);
+ render();
 }
 const premium=document.getElementById('premium-properties');if(premium)premium.innerHTML=(demo?properties:properties.filter(p=>p.is_premium||p.featured)).map(propertyCard).join('')||'<div class="empty-state">Premium stays will appear here.</div>';
 const detail=document.getElementById('property-detail');
@@ -30,7 +91,7 @@ if(detail){
  if(!p){detail.innerHTML='<div class="empty-state">This property could not be found. <a href="stays.html">Browse all stays</a>.</div>';}
  else{detail.innerHTML=`<p class="eyebrow">${p.location||'Zambia'}</p><h1 style="font:500 45px Playfair Display;color:var(--green)">${p.name||'Accommodation'}</h1><div class="property-layout"><div><div class="property-cover" style="background-image:url('${p.image||p.cover_image_url||'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?auto=format&fit=crop&w=1200&q=80'}')"></div><h2>About this stay</h2><p>${p.description||'Discover this accommodation.'}</p><p class="muted">${demo?'Sample listing — not bookable.':'Property details are being connected to the live room and availability tables.'}</p></div><aside class="booking-box"><span class="eyebrow">PLAN YOUR STAY</span><h2>${p.price||'Check rates'}</h2><p>Choose your dates and room options when live booking is enabled.</p><a class="btn btn-primary full" href="login.html">Sign in to continue</a><p class="form-note">Bookings and payments will be confirmed through secure server-side services.</p></aside></div>`;}
 }
-document.getElementById('home-search')?.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const dest=String(fd.get('destination')||'');location.href='stays.html'+(dest?'?destination='+encodeURIComponent(dest):'');});
+document.getElementById('home-search')?.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const params=new URLSearchParams();for(const key of ['destination','checkin','checkout','guests']){const value=String(fd.get(key)||'').trim();if(value)params.set(key,value);}if(fd.get('checkin')&&fd.get('checkout')&&String(fd.get('checkout'))<=String(fd.get('checkin'))){alert('Check-out must be after check-in.');return;}location.href='stays.html'+(params.size?'?'+params.toString():'');});
 document.getElementById('login-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const msg=document.getElementById('auth-message');msg.textContent='Signing in…';try{await signIn(f.email.value,f.password.value);msg.textContent='Signed in. Redirecting…';location.href='account/dashboard.html';}catch(err){msg.textContent=err.message;}});
 document.getElementById('register-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const msg=document.getElementById('auth-message');msg.textContent='Creating account…';try{const result=await signUp({email:f.email.value,password:f.password.value,fullName:f.full_name.value,accountType:f.account_type.value});msg.textContent=result.session?'Account created.':'Check your email to confirm your account.';}catch(err){msg.textContent=err.message;}});
 document.querySelectorAll('[data-signout]').forEach(b=>b.addEventListener('click',async()=>{await signOut();location.href='../index.html';}));
